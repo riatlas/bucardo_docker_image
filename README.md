@@ -46,7 +46,7 @@ Ubuntu-based Bucardo image for Docker Containers.
       {
         "sources": [3],
         "targets": [1,2],
-        "tables": "client",
+        "tables": "**",
         "onetimecopy": 1
       },{
         "sources": [1,2],
@@ -68,7 +68,7 @@ Ubuntu-based Bucardo image for Docker Containers.
 
   * Each entity inside the *sources* and *targets* arrays represents an *ID* referring to the databases described beforehand;
 
-  * The other attribute required is the syncs' *table lists*. A *table list* is a String containing the tables sync'd by that sync, separated by a comma and a space, as in the example above.
+  * The other attribute required is the syncs' *table lists*. A *table list* is a String containing the tables sync'd by that sync, separated by a comma and a space, as in the example above. a "*" into this field means "add all tables"
 
   * [Onetimecopy](https://bucardo.org/wiki/Onetimecopy) is used for full table copy:
     - 0 No full copy is done
