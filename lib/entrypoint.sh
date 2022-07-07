@@ -50,6 +50,7 @@ validate_list_attr() {
 
 run_bucardo_command() {
   local comm=$1
+  echo "RUN BUCARDO CMD: $comm"
   su - postgres -c "bucardo $comm"
 }
 
@@ -121,9 +122,9 @@ add_databases_to_bucardo() {
     db_pass=$(load_db_pass $db_index)
     run_bucardo_command "del db db$db_id --force"
     run_bucardo_command "add db db$db_id dbname=\"$(db_attr $db_index dbname string)\" \
-                                user=\"$(db_attr $db_index user string)\" \
-                                pass=\"$db_pass\" \
-                                host=\"$(db_attr $db_index host string)\""
+      user=\"$(db_attr $db_index user string)\" \
+      pass=\"$db_pass\" \
+      host=\"$(db_attr $db_index host string)\"" || exit 1
     db_index=$(expr $db_index + 1)
   done
 }
@@ -158,10 +159,23 @@ add_syncs_to_bucardo() {
     db_sync_string $sync_index
     local one_time_copy="$(one_time_copy_attr $sync_index)"
     run_bucardo_command "del sync sync$sync_index"
-    run_bucardo_command "add sync sync$sync_index \
-                         dbs=$DB_STRING \
-                         tables=$(sync_attr $sync_index tables list) \
-                         onetimecopy=$one_time_copy"
+
+    local tables_list=$(sync_attr $sync_index tables list)
+
+    echo "tables_list = [$tables_list]"
+
+    [ "$(echo $tables_list | tr -d '"')" == "*" ] && {
+      run_bucardo_command "add all tables relgroup=sync$sync_index"
+      run_bucardo_command "add sync sync$sync_index \
+        dbs=$DB_STRING \
+        relgroup=sync$sync_index \
+        onetimecopy=$one_time_copy"
+    } || {
+      run_bucardo_command "add sync sync$sync_index \
+        dbs=$DB_STRING \
+        tables=$tables_list \
+        onetimecopy=$one_time_copy"
+    }
     sync_index=$(expr $sync_index + 1)
   done
 }
