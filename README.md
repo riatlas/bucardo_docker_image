@@ -2,116 +2,135 @@
 
 Ubuntu-based Bucardo image for Docker Containers.
 
+# Non JSON version
+This repo propose a version without the json feature. Instead you can mount a script to do more complex workflow.
+
 ### Contents
-* [How to use it (plain-text passwords)](#how-to-use-it-plain-text-passwords)
-* [How to use it (env-based passwords)](#how-to-use-it-env-based-passwords)
 * [Acknowlegments](#acknowlegments)
 * [Copyright and License](#copyright-and-license)
 
 ---
 
-## How to use it (plain-text passwords)
+## How to use it 
 
 1. Create a folder;
 
-2. Create a "bucardo.json" inside this folder;
+2. Create a "bucardo.sh" inside this folder;
 
-3. Fill the "bucardo.json" file following this example:
+3. Fill the "bucardo.sh" file following this example:
 
-  ```json
-  // bucardo.json
+```json
+// bucardo.sh
 
-  {
-    "databases":[
-      {
-        "id": 3,
-        "dbname": "example_db",
-        "host": "host0.example.com",
-        "user": "example_user",
-        "pass": "secret"
-      },{
-        "id": 1,
-        "dbname": "example_db",
-        "host": "host1.example.com",
-        "user": "example_user",
-        "pass": "secret"
-      },{
-        "id": 2,
-        "dbname": "example_db",
-        "host": "host3.example.com",
-        "user": "example_user",
-        "pass": "secret"
-      }],
-    "syncs" : [
-      {
-        "sources": [3],
-        "targets": [1,2],
-        "tables": "**",
-        "onetimecopy": 1
-      },{
-        "sources": [1,2],
-        "targets": [3],
-        "tables": "product,order",
-        "onetimecopy": 0
-      }
-    ]
-  }
-  ```
+  set -euo pipefail
 
-  * Inside databases, describe all databases you desire to sync as a source and/or as a target;
+# Example script
+# the script combine bucardo commands and psql 
 
-  * The *ID* attribute must be a unique integer per database, and has nothing to do your database but the way the container will identify it;
 
-  * Once your databases are described, you must describe your *syncs*;
+echo "create test db"
+createdb test1 
+createdb test2 
 
-  * Each sync must have one or more *sources*, and one or more *targets*; and these have to be described following JSON standard Array notation;
+echo "run pgbench"
+pgbench -i test1 
+pgbench -i test2 
 
-  * Each entity inside the *sources* and *targets* arrays represents an *ID* referring to the databases described beforehand;
+# create a table without a primary key
+for db in "test1" "test2"; do
+  psql -d $db -At <<EOF
+  CREATE TABLE "test_me" (
+    id serial NOT NULL,
+    text varchar(255) NULL
+  );
+EOF
+done
 
-  * The other attribute required is the syncs' *table lists*. A *table list* is a String containing the tables sync'd by that sync, separated by a comma and a space, as in the example above. a "*" into this field means "add all tables"
 
-  * [Onetimecopy](https://bucardo.org/wiki/Onetimecopy) is used for full table copy:
-    - 0 No full copy is done
-    - 1 A full table copy is always performed
-    - 2 A full copy is done in case the destination table is empty
+# add databases
+echo "add databases"
+bucardo add database test1 dbname=test1 dbuser=postgres
+bucardo add database test2 dbname=test2 dbuser=postgres
 
+# create primary key for tables that do not have it
+for db in "test1" "test2"; do
+  echo "DATABASE: $db" 
+  T_TABLES=($(psql -v ON_ERROR_STOP=1 -d $db -At --csv <<EOF | awk -F, '{print $1"."$2}' 
+  select tbl.table_schema, 
+        tbl.table_name
+  from information_schema.tables tbl
+  where table_type = 'BASE TABLE'
+    and table_schema not in ('pg_catalog', 'information_schema')
+    and not exists (select 1 
+                    from information_schema.key_column_usage kcu
+                    where kcu.table_name = tbl.table_name 
+                      and kcu.table_schema = tbl.table_schema)
+EOF
+  ))
+
+  for i in "${T_TABLES[@]}"; do
+    psql -v ON_ERROR_STOP=1 -d $db -At <<EOF
+      ALTER TABLE $i ADD COLUMN __PK__ SERIAL PRIMARY KEY;
+EOF
+  done
+done
+
+# test
+# psql -v ON_ERROR_STOP=1 -d test1 -At <<EOF
+# ALTER TABLE pgbench_history DROP COLUMN __PK__;
+# EOF
+
+# add tables
+echo "add tables to bucardo"
+bucardo add all tables db=test1 --relgroup=pgbench --verbose 
+# add sequences (if any)
+bucardo add all sequences db=test1 
+
+# add the syncs
+echo "add syncs to bucardo"
+bucardo add sync benchdelta relgroup=pgbench dbs=test1,test2 onetimecopy=1 
+
+# truncate tabla table to show the replication
+psql -v ON_ERROR_STOP=1 -d test2 -At <<EOF
+truncate pgbench_accounts;
+EOF
+
+# start bucardo
+echo "start bucardo"
+bucardo start
+
+# check status
+sleep 5
+T1=$(psql -v ON_ERROR_STOP=1 -d test1 -At -c 'select count(*) from pgbench_accounts')
+T2=$(psql -v ON_ERROR_STOP=1 -d test2 -At -c 'select count(*) from pgbench_accounts')
+
+echo "T1=$T1, T2=$T2"
+echo "Test replication successful comparing the pgbench_accounts tables"
+[ "$T1" == "$T2" ] && {
+  echo "Sync Successful"
+} || {
+  echo "Sync Failed"
+}
+```
+
+The script is based on the [tutorial](https://bucardo.org/Bucardo/pgbench_example) in Bucardo website: 
+ 
 4. Start the container:
 
   ```bash
   docker run --name my_own_bucardo_container \
-    -v <bucardo.json dir>:/media/bucardo \
-    -d plgr/bucardo
-  ```
-
-5. Check bucardo's status:
-
-  ```bash
-  docker logs my_own_bucardo_container -f
-  ```
-
-## How to use it (env-based passwords)
-
-Same as before. The only difference is:
-
-* In the JSON database definition, type "env" for password instead of the database user password;
-
-* When you create a container, inform the password as a environment variable named *BUCARDO_DB<ID>*, where *ID* is the *ID* you defined earlier in the *bucardo.json*:
-
-  ```bash
-  docker run --name my_own_bucardo_container \
-      -v <bucardo.json dir>:/media/bucardo \
-      -e BUCARDO_DB3="secret" \
-      -d plgr/bucardo
+    -v <bucardo.sh dir>:/media/bucardo \
+    -d ghcr.io/robyrobot/bucardo_docker_image:v5.6.0-nj-1
   ```
 
 ## Acknowlegments
 
 This image uses the following software components:
 
-* Ubuntu Xenial;
-* PostgreSQL 9.5;
+* Ubuntu jammy;
+* PostgreSQL 14;
 * Bucardo;
-* JQ.
+* JQ. 
 
 ## Copyright and License
 
