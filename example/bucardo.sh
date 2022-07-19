@@ -3,14 +3,15 @@ set -euo pipefail
 # Example script
 # the script combine bucardo commands and psql 
 
+trap "clean" EXIT
+
+function clean() {
+  bucardo stop
+}
 
 echo "create test db"
 createdb test1 
 createdb test2 
-
-echo "run pgbench"
-pgbench -i test1 
-pgbench -i test2 
 
 # create a table without a primary key
 for db in "test1" "test2"; do
@@ -22,6 +23,15 @@ for db in "test1" "test2"; do
 EOF
 done
 
+# generate data for test1
+psql -d test1 -At <<EOF
+insert into test_me (
+    text
+)
+select
+    md5(random()::text)
+from generate_series(1, 100) s(i)
+EOF
 
 # add databases
 echo "add databases"
@@ -51,11 +61,6 @@ EOF
   done
 done
 
-# test
-# psql -v ON_ERROR_STOP=1 -d test1 -At <<EOF
-# ALTER TABLE pgbench_history DROP COLUMN __PK__;
-# EOF
-
 # add tables
 echo "add tables to bucardo"
 bucardo add all tables db=test1 --relgroup=pgbench --verbose 
@@ -66,24 +71,26 @@ bucardo add all sequences db=test1
 echo "add syncs to bucardo"
 bucardo add sync benchdelta relgroup=pgbench dbs=test1,test2 onetimecopy=1 
 
-# truncate tabla table to show the replication
-psql -v ON_ERROR_STOP=1 -d test2 -At <<EOF
-truncate pgbench_accounts;
-EOF
-
 # start bucardo
 echo "start bucardo"
 bucardo start
 
 # check status
 sleep 5
-T1=$(psql -v ON_ERROR_STOP=1 -d test1 -At -c 'select count(*) from pgbench_accounts')
-T2=$(psql -v ON_ERROR_STOP=1 -d test2 -At -c 'select count(*) from pgbench_accounts')
+T1=$(psql -v ON_ERROR_STOP=1 -d test1 -At -c 'select count(*) from test_me')
+T2=$(psql -v ON_ERROR_STOP=1 -d test2 -At -c 'select count(*) from test_me')
 
 echo "T1=$T1, T2=$T2"
-echo "Test replication successful comparing the pgbench_accounts tables"
 [ "$T1" == "$T2" ] && {
   echo "Sync Successful"
 } || {
   echo "Sync Failed"
 }
+
+
+psql -v ON_ERROR_STOP=1 -d test2 <<EOF
+SELECT *  FROM test_me limit 5;
+ALTER TABLE test_me DROP COLUMN __PK__;
+SELECT *  FROM test_me limit 5;
+
+EOF
