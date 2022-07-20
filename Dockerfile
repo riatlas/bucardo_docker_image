@@ -32,7 +32,5 @@ RUN service postgresql start \
 COPY lib/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-USER postgres
-
 VOLUME "/media/bucardo"
 CMD ["/bin/bash","-c","/entrypoint.sh"]

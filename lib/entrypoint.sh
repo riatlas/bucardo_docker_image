@@ -1,7 +1,7 @@
 #/bin/bash
 
 # start postgresql
-service postgresql start 2> /dev/null
+service postgresql start
 
 echo "check bucardo.sh file"
 [ -e /media/bucardo/bucardo.sh ] || {
