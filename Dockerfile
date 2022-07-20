@@ -1,3 +1,5 @@
+FROM dimitri/pgcopydb:v0.8 AS pgcopydb
+
 FROM ubuntu:jammy
 
 LABEL maintainer="lucas@vieira.io"
@@ -10,15 +12,15 @@ RUN apt-get -y update \
     && apt-get -y upgrade
 
 RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
-    apt-get -y install postgresql-${PG_VERSION} bucardo jq curl ca-certificates gnupg && \
-    sh /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh  && \
-    apt-get install -y pgcopydb && \
+    apt-get -y install postgresql-${PG_VERSION} bucardo jq && \
     apt-get clean autoclean && \
     apt-get autoremove --yes && \
     rm -rf /var/lib/{apt,dpkg,cache,log}/
 
 COPY etc/pg_hba.conf /etc/postgresql/${PG_VERSION}/main/
 COPY etc/bucardorc /etc/bucardorc
+
+COPY --from=pgcopydb /usr/local/bin/pgcopydb /usr/local/bin
 
 RUN chown postgres /etc/postgresql/${PG_VERSION}/main/pg_hba.conf
 RUN chown postgres /etc/bucardorc
