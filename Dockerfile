@@ -12,7 +12,7 @@ RUN apt-get -y update \
     && apt-get -y upgrade
 
 RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
-    apt-get -y install postgresql-${PG_VERSION} bucardo jq && \
+    apt-get -y install postgresql-${PG_VERSION} bucardo jq parallel && \
     apt-get clean autoclean && \
     apt-get autoremove --yes && \
     rm -rf /var/lib/{apt,dpkg,cache,log}/
