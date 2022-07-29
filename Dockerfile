@@ -32,7 +32,9 @@ RUN service postgresql start \
     && su - postgres -c "bucardo install --batch"
 
 COPY lib/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh 
 
-VOLUME "/media/bucardo"
+VOLUME "/bucardo/scripts"
+USER postgres
+
 CMD ["/bin/bash","-c","/entrypoint.sh"]

@@ -3,12 +3,14 @@
 # start postgresql
 service postgresql start
 
-echo "check bucardo.sh file"
-[ -e /media/bucardo/bucardo.sh ] || {
-  echo "Missing bucardo.sh file"
+SCRIPT_PATH=/bucardo/scripts/
+
+# run scrips
+ls $SCRIPT_PATH/*.sh &> /dev/null || {
+  echo "No scripts found in /bucardo/scripts. Stopping"
   exit 1
 }
 
-# run bucardo commands from file
-chmod +x /media/bucardo/bucardo.sh
-su -c '/media/bucardo/bucardo.sh' postgres
+for s in $SCRIPT_PATH/*.sh; do
+source $s
+done
