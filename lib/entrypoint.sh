@@ -1,9 +1,8 @@
 #/bin/bash
+SCRIPT_PATH=/bucardo/scripts/
 
 # start postgresql
-service postgresql start
-
-SCRIPT_PATH=/bucardo/scripts/
+service postgresql start > /dev/null 
 
 # run scrips
 ls $SCRIPT_PATH/*.sh &> /dev/null || {
@@ -11,6 +10,7 @@ ls $SCRIPT_PATH/*.sh &> /dev/null || {
   exit 1
 }
 
+# source all scripts in SCRIPT_PATH
 for s in $SCRIPT_PATH/*.sh; do
 source $s
 done
