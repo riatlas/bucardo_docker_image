@@ -19,7 +19,7 @@ This repo propose a version without the json feature. Instead you can mount a sc
 
 3. Fill the "bucardo.sh" file following this example:
 
-```json
+```shell
 // bucardo.sh
 
   set -euo pipefail
